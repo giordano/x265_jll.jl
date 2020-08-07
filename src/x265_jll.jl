@@ -22,7 +22,7 @@ if VERSION < v"1.3.0-rc4"
     error("Unable to import x265_jll on Julia versions older than 1.3!")
 end
 
-using Pkg, Pkg.BinaryPlatforms, Pkg.Artifacts, Libdl
+using Pkg, Pkg.BinaryPlatforms, Pkg.Artifacts, Libdl, JLLWrappers
 import Base: UUID
 
 # We put these inter-JLL-package API values here so that they are always defined, even if there
@@ -31,17 +31,17 @@ const PATH_list = String[]
 const LIBPATH_list = String[]
 
 # Load Artifacts.toml file
-artifacts_toml = joinpath(@__DIR__, "..", "Artifacts.toml")
+artifacts_toml = get_artifacts_toml(@__DIR__)
 
 # Extract all platforms
-artifacts = Pkg.Artifacts.load_artifacts_toml(artifacts_toml; pkg_uuid=UUID("dfaa095f-4041-5dcd-9319-2fabd8486b76"))
-platforms = [Pkg.Artifacts.unpack_platform(e, "x265", artifacts_toml) for e in artifacts["x265"]]
+artifacts = get_artifacts(artifacts_toml, UUID("dfaa095f-4041-5dcd-9319-2fabd8486b76"))
+platforms = get_platforms("x265", artifacts_toml, artifacts)
 
 # Filter platforms based on what wrappers we've generated on-disk
-filter!(p -> isfile(joinpath(@__DIR__, "wrappers", replace(triplet(p), "arm-" => "armv7l-") * ".jl")), platforms)
+cleanup_platforms!(@__DIR__, platforms)
 
 # From the available options, choose the best platform
-best_platform = select_platform(Dict(p => triplet(p) for p in platforms))
+best_platform = select_best_platform(platforms)
 
 # Silently fail if there's no binaries for this platform
 if best_platform === nothing
@@ -50,7 +50,7 @@ else
     # Load the appropriate wrapper.  Note that on older Julia versions, we still
     # say "arm-linux-gnueabihf" instead of the more correct "armv7l-linux-gnueabihf",
     # so we manually correct for that here:
-    best_platform = replace(best_platform, "arm-" => "armv7l-")
+    best_platform = cleanup_best_platform(best_platform)
     include(joinpath(@__DIR__, "wrappers", "$(best_platform).jl"))
 end
 
